@@ -13,6 +13,7 @@ class Vision(Node):
 
 
     def callback(self, msg):
+
         #print("Received: timestamp is %s" % msg.header.stamp.sec)
         #s = String()
         #s.data = str(msg.header.stamp.sec)
