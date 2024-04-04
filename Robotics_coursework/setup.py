@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'py_pubsub'
+package_name = 'Robotics_coursework'
 
 setup(
     name=package_name,
@@ -16,7 +16,7 @@ setup(
     maintainer='lcas',
     maintainer_email='student@socstech.support',
     description='TODO: Package description',
-    license='Apache-2.0',
+    license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
