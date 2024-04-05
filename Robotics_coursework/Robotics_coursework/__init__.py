@@ -2,6 +2,10 @@
 
 #
 """
+Detect wall:
+https://get-help.theconstruct.ai/t/2-1-create-service-server-how-to-update-scan-values-in-while-loop-in-find-wall-service/23382
+
+
 docker pull lcas.lincoln.ac.uk/lcas/devcontainer/ros2-teaching:2324-devel
 
 ros2 launch uol_tidybot tidybot.launch.py
