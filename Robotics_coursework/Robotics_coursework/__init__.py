@@ -1,8 +1,12 @@
-#ros2 launch uol_tidybot tidybot.launch.py
+#
 
-#docker pull lcas.lincoln.ac.uk/lcas/devcontainer/ros2-teaching:2324-devel
-
+#
 """
+docker pull lcas.lincoln.ac.uk/lcas/devcontainer/ros2-teaching:2324-devel
+
+ros2 launch uol_tidybot tidybot.launch.py
+
+
 ros2 topic pub /cmd_vel geometry_msgs/Twist "linear:
   x: 0.0
   y: 0.0

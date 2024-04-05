@@ -37,7 +37,7 @@ class PushBlocks(Node):
 
         green_block, hierarchy = cv2.findContours(current_mask_green, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-        #only keep biggest green block
+        #only keep second biggest green block to account for the green on the wall
         green_block = sorted(green_block, key=cv2.contourArea, reverse=True)[:1]
         #draw contour
         current_green_block = cv2.drawContours(current_frame, green_block, 0, (255, 255, 0), 20)
