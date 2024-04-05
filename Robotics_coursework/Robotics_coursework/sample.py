@@ -34,7 +34,7 @@ class ColourChaser(Node):
         current_frame_hsv = cv2.cvtColor(current_frame, cv2.COLOR_BGR2HSV)
         # Create mask for range of colours (HSV low values, HSV high values)
         #current_frame_mask = cv2.inRange(current_frame_hsv,(70, 0, 50), (150, 255, 255))
-        current_frame_mask = cv2.inRange(current_frame_hsv,(0, 150, 50), (255, 255, 255)) # orange
+        current_frame_mask = cv2.inRange(current_frame_hsv,(60, 150, 50), (255, 255, 255)) # orange
 
         contours, hierarchy = cv2.findContours(current_frame_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -47,7 +47,7 @@ class ColourChaser(Node):
         self.tw=Twist() # twist message to publish
         
         if len(contours) > 0:
-            # find the centre of the contour: https://docs.opencv.org/3.4/d8/d23/classcv_1_1Moments.html
+            # find the centre of the contour: https://dcv2.dcv2.drawContours()rawContours()ocs.opencv.org/3.4/d8/d23/classcv_1_1Moments.html
             M = cv2.moments(contours[0]) # only select the largest controur
             if M['m00'] > 0:
                 # find the centroid of the contour
