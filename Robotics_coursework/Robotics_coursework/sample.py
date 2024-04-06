@@ -2,7 +2,9 @@ import rclpy
 from rclpy.node import Node
 
 from sensor_msgs.msg import Image
+from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
+from nav_msgs.msg import OccupancyGrid
 from cv_bridge import CvBridge # Package to convert between ROS and OpenCV Images
 import cv2
 import numpy as np
@@ -18,9 +20,13 @@ class ColourChaser(Node):
 
         # subscribe to the camera topic
         self.create_subscription(Image, '/limo/depth_camera_link/image_raw', self.camera_callback, 1)
-
+        self.create_subscription(LaserScan, '/scan', self.Laser_callback, 1)
         # Used to convert between ROS and OpenCV images
         self.br = CvBridge()
+
+        self.distance_to_wall = 999
+        self.pushing = False
+        self.perpendicular = 0
 
     def camera_callback(self, data):
         #self.get_logger().info("camera_callback")
@@ -34,7 +40,7 @@ class ColourChaser(Node):
         current_frame_hsv = cv2.cvtColor(current_frame, cv2.COLOR_BGR2HSV)
         # Create mask for range of colours (HSV low values, HSV high values)
         #current_frame_mask = cv2.inRange(current_frame_hsv,(70, 0, 50), (150, 255, 255))
-        current_frame_mask = cv2.inRange(current_frame_hsv,(60, 150, 50), (255, 255, 255)) # orange
+        current_frame_mask = cv2.inRange(current_frame_hsv,(60, 150, 50), (255, 255, 255)) 
 
         contours, hierarchy = cv2.findContours(current_frame_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -46,6 +52,9 @@ class ColourChaser(Node):
 
         self.tw=Twist() # twist message to publish
         
+        
+        
+
         if len(contours) > 0:
             # find the centre of the contour: https://dcv2.dcv2.drawContours()rawContours()ocs.opencv.org/3.4/d8/d23/classcv_1_1Moments.html
             M = cv2.moments(contours[0]) # only select the largest controur
@@ -62,27 +71,62 @@ class ColourChaser(Node):
                 # find height/width of robot camera image from ros2 topic echo /camera/image_raw height: 1080 width: 1920
 
                 # if center of object is to the left of image center move left
-                if cx < data.width / 3:
+                if cx < 3*data.width / 7 and (self.pushing == False or self.distance_to_wall < 0.3):
                     self.tw.angular.z=0.3
+                    print("Left")
+                    self.pushing = False
                 # else if center of object is to the right of image center move right
-                elif cx >= 2 * data.width / 3:
+                elif cx >= 4 * data.width / 7 and (self.pushing == False or self.distance_to_wall < 0.3):
                     self.tw.angular.z=-0.3
+                    print("Right")
+                    self.pushing = False
                 else: # center of object is in a 100 px range in the center of the image so dont turn
-                    #print("object in the center of image")
+                    print("object in the center of image")
                     self.tw.angular.z=0.0
                     self.tw.linear.x = 0.2
+                    self.pushing = True
+
+                
                     
         else:
             print("No Centroid Found")
-            # turn until we can see a coloured object
-            self.tw.angular.z=0.3
+            if(self.pushing == False or self.distance_to_wall < 0.3):
+                self.tw.linear.x = -0.1
+                self.tw.angular.z=0.6
+                self.pushing = False
+            else:
+                self.tw.angular.z=0.0
+                self.tw.linear.x = 0.2
+                print("Doing nothing")
 
+
+            # turn until we can see a coloured object
+            
+        print("Pushing:", self.pushing, ": LinX: ", self.tw.linear.x, ": AngZ: ", self.tw.angular.z)
         self.pub_cmd_vel.publish(self.tw)
 
         # show the cv images
         current_frame_contours_small = cv2.resize(current_frame_contours, (0,0), fx=0.4, fy=0.4) # reduce image size
         #cv2.imshow("Image window", current_frame_contours_small)
         #cv2.waitKey(1)
+
+
+    def Laser_callback(self, msg):
+        self.min_dist = 999
+        self.min_index = -1
+        for i in range(len(msg.ranges)):
+            if msg.ranges[i] < self.min_dist:
+                self.min_dist = msg.ranges[i]
+                self.min_index = i
+
+        self.distance_to_wall = self.min_dist
+
+        self.perpendicular = int(100*(self.min_index - int(len(msg.ranges)/2))/int(len(msg.ranges)/2))
+        print("Angle: ", self.perpendicular)
+        
+
+        print("Distance: ", self.distance_to_wall)
+
 
 def main(args=None):
     print('Starting colour_chaser.py.')

@@ -21,7 +21,7 @@ class OpencvBridge(Node):
 
         cv_image = self.br.imgmsg_to_cv2(data, desired_encoding='bgr8')
         gray_img = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
-        gray_img_small = cv2.resize(gray_img, (0, 0), fx = 0.2, fy = 0.2)
+        gray_img_small = cv2.resize(gray_img, (0, 0), fx = 1, fy = 1)
         print(np.mean(gray_img_small))
 
         blur_img = cv2.blur(gray_img, (3, 3))

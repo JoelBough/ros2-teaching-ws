@@ -18,7 +18,7 @@ ros2 topic pub /cmd_vel geometry_msgs/Twist "linear:
 angular:
   x: 0.0
   y: 0.0
-  z: 0.5" -r 10
+  z: 0.5" -r 2
 
 
   ros2 param set /limo/gazebo_ros_depth_camera_sensor update_rate 25.0
