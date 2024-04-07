@@ -25,8 +25,18 @@ class ColourChaser(Node):
         self.br = CvBridge()
 
         self.distance_to_wall = 999
-        self.pushing = False
         self.perpendicular = 0
+        self.push_dir = 0
+        self.push_start = 0
+        self.push_mode = 0
+        self.push_rotate = 0
+        self.push_counter = 0
+        self.mode_2_counter = -1
+
+        self.tracker = ["", "", "", ""]
+
+        self.timer = self.create_timer(1, self.run_step)
+        self.counter  = 0
 
     def camera_callback(self, data):
         #self.get_logger().info("camera_callback")
@@ -52,62 +62,108 @@ class ColourChaser(Node):
 
         self.tw=Twist() # twist message to publish
         
-        
-        
 
-        if len(contours) > 0:
+        cx = -1
+        cy = -1
+        
+        if len(contours) > 0 and self.push_mode == 0:
             # find the centre of the contour: https://dcv2.dcv2.drawContours()rawContours()ocs.opencv.org/3.4/d8/d23/classcv_1_1Moments.html
-            M = cv2.moments(contours[0]) # only select the largest controur
+            M = cv2.moments(contours[0]) # only select the largest contour
             if M['m00'] > 0:
                 # find the centroid of the contour
                 cx = int(M['m10']/M['m00'])
                 cy = int(M['m01']/M['m00'])
                 print("Centroid of the biggest area: ({}, {})".format(cx, cy))
+        
+        if len(contours) > 0 and self.push_mode == 0:
+            # Draw a circle centered at centroid coordinates
+            # cv2.circle(image, center_coordinates, radius, color, thickness) -1 px will fill the circle
+            cv2.circle(current_frame, (round(cx), round(cy)), 5, (0, 255, 0), -1)
+                        
+            track_list = self.tracker[0] + self.tracker[1] + self.tracker[2] + self.tracker[3]
+            in_loop = track_list == 'LRLR' or track_list == 'RLRL'
+            print("list: ", track_list)
 
-                # Draw a circle centered at centroid coordinates
-                # cv2.circle(image, center_coordinates, radius, color, thickness) -1 px will fill the circle
-                cv2.circle(current_frame, (round(cx), round(cy)), 5, (0, 255, 0), -1)
-                            
-                # find height/width of robot camera image from ros2 topic echo /camera/image_raw height: 1080 width: 1920
-
-                # if center of object is to the left of image center move left
-                if cx < 3*data.width / 7 and (self.pushing == False or self.distance_to_wall < 0.3):
-                    self.tw.angular.z=0.3
-                    print("Left")
-                    self.pushing = False
-                # else if center of object is to the right of image center move right
-                elif cx >= 4 * data.width / 7 and (self.pushing == False or self.distance_to_wall < 0.3):
-                    self.tw.angular.z=-0.3
-                    print("Right")
-                    self.pushing = False
-                else: # center of object is in a 100 px range in the center of the image so dont turn
-                    print("object in the center of image")
-                    self.tw.angular.z=0.0
-                    self.tw.linear.x = 0.2
-                    self.pushing = True
-
-                
+            # if center of object is to the left of image center move left
+            if in_loop == False and cx < 3*data.width / 7 and (self.push_mode != 1 or self.distance_to_wall < 0.3):
+                self.tw.angular.z=0.3
+                print("Left")
+                self.tracker.append("L")
+                self.tracker.pop(0)
+                self.push_mode = 0
+            # else if center of object is to the right of image center move right
+            elif in_loop == False and cx >= 4 * data.width / 7 and (self.push_mode != 1 or self.distance_to_wall < 0.3):
+                self.tw.angular.z=-0.3
+                print("Right")
+                self.tracker.append("R")
+                self.tracker.pop(0)
+                self.push_mode = 0
+            else: # center of object is in a 100 px range in the center of the image so dont turn
+                print("object in the center of image")
+                self.tw.angular.z=0.0
+                self.tw.linear.x = 0.3
+                self.push_mode = 1
+                self.tracker.append("")
+                self.tracker.pop(0)
                     
         else:
             print("No Centroid Found")
-            if(self.pushing == False or self.distance_to_wall < 0.3):
-                self.tw.linear.x = -0.1
-                self.tw.angular.z=0.6
-                self.pushing = False
-            else:
+            self.tracker.append("")
+            self.tracker.pop(0)
+            if(self.push_mode != 1 or self.distance_to_wall < 0.3):
+                if self.push_mode == 1:
+                    self.push_mode = 0
+                if self.push_mode == 2:
+                    if self.push_start - self.distance_to_wall < -1.0 or self.counter - self.mode_2_counter > 5:
+                        self.push_mode = 3
+                        self.push_dir = 0
+                        self.push_rotate = -0.5
+                        self.push_counter = self.counter * 1 
+                elif self.push_mode == 3:
+                    if self.counter-self.push_counter >= 3:
+                        self.push_mode = 0
+                        self.push_dir = 0
+                        self.push_rotate = 0.0
+                elif self.counter - self.mode_2_counter < 30 and self.mode_2_counter >= 0:
+                    self.push_mode = 0
+                    self.push_dir = 0
+                    self.push_rotate = -0.3
+                else:
+                    print("SC:", self.counter, ": M2C:", self.mode_2_counter)
+                    self.push_dir = -1
+                    self.push_rotate = 0.0
+                    self.push_start = self.distance_to_wall * 1
+                    self.push_mode = 2
+                    self.mode_2_counter = self.counter * 1
+                    print("SC:", self.counter, ": M2C:", self.mode_2_counter)
+                    
+
+                self.tw.linear.x = 0.5 * self.push_dir
+                self.tw.angular.z = self.push_rotate
+            elif len(contours) == 0 or cx < 3*data.width / 7 or cx > 4*data.width / 7:
+                if self.push_dir == 0:
+                    self.push_dir = 1
+                    self.push_mode = 1
+                    self.push_start = self.distance_to_wall*1
+                elif self.push_dir == 1:
+                    if self.push_start - self.distance_to_wall > 0.5:
+                        self.push_dir = -1
+                        self.push_mode = 1
+                elif self.push_dir == -1:
+                    if self.push_start - self.distance_to_wall <0.2:
+                        self.push_dir = 0
+                        self.push_mode = 0
                 self.tw.angular.z=0.0
-                self.tw.linear.x = 0.2
+                self.tw.linear.x = 0.2 * self.push_dir
                 print("Doing nothing")
-
-
             # turn until we can see a coloured object
             
-        print("Pushing:", self.pushing, ": LinX: ", self.tw.linear.x, ": AngZ: ", self.tw.angular.z)
+        print(": LinX: ", self.tw.linear.x, ": AngZ: ", self.tw.angular.z, ": Dir: ", self.push_dir, ": PS-D:", round(self.push_start - self.distance_to_wall, 2), ": Mode: ", self.push_mode)
         self.pub_cmd_vel.publish(self.tw)
 
         # show the cv images
         current_frame_contours_small = cv2.resize(current_frame_contours, (0,0), fx=0.4, fy=0.4) # reduce image size
-        #cv2.imshow("Image window", current_frame_contours_small)
+        cv2.imshow("Image window", current_frame_contours_small)
         #cv2.waitKey(1)
 
 
@@ -122,10 +178,14 @@ class ColourChaser(Node):
         self.distance_to_wall = self.min_dist
 
         self.perpendicular = int(100*(self.min_index - int(len(msg.ranges)/2))/int(len(msg.ranges)/2))
-        print("Angle: ", self.perpendicular)
+       # print("Angle: ", self.perpendicular)
         
 
-        print("Distance: ", self.distance_to_wall)
+        #print("Distance: ", self.distance_to_wall)
+
+    def run_step(self):
+        self.counter += 1
+
 
 
 def main(args=None):
