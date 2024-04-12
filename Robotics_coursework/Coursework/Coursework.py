@@ -48,12 +48,12 @@ class BullDozer(Node):
         self.fine_tune_start_time = 0
 
         #operational configuration
-        self.config_in_line_block_dx_tolerance_pixels = 5  #pixels from centre
-        #bounds find the central seventh of the camera output
+        self.config_in_line_block_dx_tolerance_pixels = 5  #no of pixels either side of centre before we say it is central
+        #bounds find the central fifth of the camera output
         self.config_in_line_lower_bound = 0.4 
         self.config_in_line_upper_bound = 0.6
-        self.config_target_distance = 0.3#cant be closer than 30cm to a wall
-        self.config_push_increment = 0.5
+        self.config_target_distance = 0.3 #cant be closer than 30cm to a wall
+        self.config_push_increment = 0.5 #how far to to psh before resetting
         self.config_rotate_rate = 0.3 #will rotate 0.3 rad/s anti-clockwise
         self.config_rotate_seconds = 1.5
         self.config_fine_tune_rate = 0.04
@@ -88,7 +88,6 @@ class BullDozer(Node):
             self.tw.angular.z = 0.0
             self.current_operation = "search"
             
-
         elif self.current_operation == "search":
             #find a qualifying block if there is not already one in line
             if self.in_line_block_x == -1:
@@ -98,18 +97,17 @@ class BullDozer(Node):
                 self.fine_tune_start_time = 0
             elif (self.fine_tune_start_time ==0 or (time.time() - self.fine_tune_start_time) < self.config_fine_tune_time_limit) and abs(self.in_line_block_dx)>(self.config_in_line_block_dx_tolerance_pixels):
                 #turns the block slightly until it is perfectly in line
-                self.fine_tune()    #rotates the robot towards the target, faster the further away the targe block is
+                self.fine_tune() #rotates the robot towards the target, faster the further away the targe block is
             else:
                 self.fine_tune_start_time = 0
                 #once in line with the block, start moving towards it
                 self.current_operation = "approach"
 
         elif self.current_operation == "approach":
-            #move towards the identified and central block
-            
+            #move towards the identified and central block       
             if self.in_line_block_x > -1:
                 if (self.fine_tune_start_time ==0 or (time.time() - self.fine_tune_start_time) < self.config_fine_tune_time_limit) and abs(self.in_line_block_dx)>(self.config_in_line_block_dx_tolerance_pixels):
-                #turns the block slightly until it is perfectly in line
+                    #sets a limit on how long we are fine tuning for at a time and the centre of the block is not within the tolerance range
                     self.fine_tune()
                 else:
                     self.fine_tune_start_time = 0
@@ -180,13 +178,14 @@ class BullDozer(Node):
     def fine_tune(self): #slowly calibrate orientation to keep target block in centre of image
         
         if self.fine_tune_start_time == 0:
-            self.fine_tune_start_time = time.time()
+            self.fine_tune_start_time = time.time() #sets timer for fine tuning
         self.tw.linear.x = 0.0
-        ratio = abs(self.in_line_block_dx)/(self.config_in_line_block_dx_tolerance_pixels)
-        if ratio > 5:
+        ratio = abs(self.in_line_block_dx)/(self.config_in_line_block_dx_tolerance_pixels)#ratio determines how fast to turn based on distance block is from centre
+        if ratio > 5:#caps the ratio to reduce risk of over correction
             ratio = 5
-        direction = (-self.in_line_block_dx / abs(self.in_line_block_dx))
-        self.tw.angular.z = self.config_fine_tune_rate * ratio * direction
+        direction = (-self.in_line_block_dx / abs(self.in_line_block_dx)) #gets +- 1 to determine direction to turn and turns
+        self.tw.angular.z = self.config_fine_tune_rate * ratio * direction 
+
     def camera_callback(self, data):
         #stores the image from the robot camera and its characteristics
 
@@ -200,19 +199,20 @@ class BullDozer(Node):
         contours = sorted(contours, key=cv2.contourArea, reverse = True)#sorts the contours by area
 
         #find the largest contour and the largest or first in the centre
+        #based off colour chaser workshop 3
         in_line_block_x = -1
         in_line_block_dx = -1
         in_line_block_area = 0
-        for contour in contours:
+        for contour in contours:#filters through largest to smallest
             cx = self.find_contour_centre_x(contour)
-            if self.contour_x_is_in_line(cx):
+            if self.contour_x_is_in_line(cx):#if the contour is in the middle(in case there is a larger contour not in the middle)
                 dx = self.contour_x_distance_from_centre(cx)
                 if in_line_block_dx == -1 or abs(dx) < in_line_block_dx:
                     in_line_block_x = cx
-                    in_line_block_area = cv2.contourArea(contour) * 1
+                    in_line_block_area = cv2.contourArea(contour) * 1 
                     in_line_block_dx = dx
 
-        #store results in self
+        #store results of target block in self
         self.in_line_block_x = in_line_block_x
         self.in_line_block_dx = in_line_block_dx
         self.in_line_block_area = in_line_block_area
@@ -222,13 +222,6 @@ class BullDozer(Node):
         else:
             self.largest_block_x = -1
 
-        
-        #draw the contours onto the current frame 
-        current_frame_contours = cv2.drawContours(current_frame, contours, 0, (255, 255, 0), 20)
-        #reduce image size and display(Workshop 03)
-        current_frame_contours_small = cv2.resize(current_frame_contours, (0, 0), fx = 0.4, fy=0.4)
-        cv2.namedWindow("Image window", 1)
-        cv2.imshow("Image window", current_frame_contours_small)
 
         #store the contours in self
         self.contours = contours.copy()
@@ -248,9 +241,10 @@ class BullDozer(Node):
         #loops through each laser to obtain location information
         for i in range(len(msg.ranges)):
             r = msg.ranges[i] * 1
-            if math.isinf(r):
+            #was getting outputs of infinite when robot got to a wall so implemented a check and set to zero if it occurs
+            if math.isinf(r): #https://www.w3schools.com/python/ref_math_isinf.asp
                 r = 0
-            if i == len(msg.ranges)//2:#records value of middle(forward) laser 
+            if i == r//2:#records value of middle(forward) laser 
                 forward_distance = r
             #if current laser is the closest to the wall so far, record it as it is the closest perpendicular distance to the wall
             if r < min_distance or min_distance < 0:
